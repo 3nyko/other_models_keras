@@ -127,12 +127,12 @@ def generate_image(df,dataset_number):
             count=0
             ims = []
 
-# generate_image(df_0,0)
-# generate_image(df_1,1)
-# generate_image(df_2,2)
-# generate_image(df_3,3)
-# generate_image(df_4,4)
-# generate_image(df_5,5)
+generate_image(df_0,0)
+generate_image(df_1,1)
+generate_image(df_2,2)
+generate_image(df_3,3)
+generate_image(df_4,4)
+generate_image(df_5,5)
 
 
 # =======   SPLITTING THE TRAINING AND TESTING SET
@@ -195,8 +195,8 @@ def resize_to_224():
     get_224(folder='./test/',dstdir=DATA_DIR2_224)
 
 # fix
-# create_test_set()
-# resize_to_224()
+create_test_set()
+resize_to_224()
 
 # Read the images for each category, the file name may vary (27.png, 83.png...)
 img1 = Image.open('./train_224/0/27.png')
