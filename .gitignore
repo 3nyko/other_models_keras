@@ -1,0 +1,10 @@
+# ignore datasets
+data/
+train/
+test/
+train_224/
+test_224/
+
+# ignore weights
+*.h5
+*.hdf5
