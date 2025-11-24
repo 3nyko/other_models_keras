@@ -24,6 +24,7 @@ from keras.utils import load_img
 from keras.utils import img_to_array
 import math
 import random
+import datetime
 from keras.utils import plot_model
 
 # Training and metrics
@@ -84,6 +85,27 @@ validation_dataset = validation_dataset.map(lambda x, y: (normalization(x), y))
 
 #plot the figures
 class LossHistory(keras.callbacks.Callback):
+    def __init__(
+        self,
+        model_name="model",
+
+        # oddělené limity pro LOSS graf
+        y_min_loss=0,
+        y_max_loss=None,
+
+        # oddělené limity pro ACC graf
+        y_min_acc=0,
+        y_max_acc=None,
+    ):
+        super().__init__()
+        self.model_name = model_name
+
+        self.y_min_loss = y_min_loss
+        self.y_max_loss = y_max_loss
+
+        self.y_min_acc = y_min_acc
+        self.y_max_acc = y_max_acc
+
     def on_train_begin(self, logs=None):
         self.losses = []
         self.val_losses = []
@@ -96,27 +118,61 @@ class LossHistory(keras.callbacks.Callback):
         self.acc.append(logs.get('accuracy'))
         self.val_acc.append(logs.get('val_accuracy'))
 
-    def plot(self):
+    def save_plots(self):
+        import datetime, os
+        import matplotlib.pyplot as plt
+
+        # ====== 1) vytvoření složky result/YYYY_MM_DD_HH_MM_modelname ======
+        timestamp = datetime.datetime.now().strftime("%Y_%m_%d_%H_%M")
+        save_dir = os.path.join("result", f"{timestamp}_{self.model_name}")
+        os.makedirs(save_dir, exist_ok=True)
+
         epochs = range(len(self.losses))
 
-        plt.figure()
-        plt.plot(epochs, self.losses, "g", label="Train Loss")
-        plt.plot(epochs, self.val_losses, "r", label="Val Loss")
-        plt.plot(epochs, self.acc, "b", label="Train Acc")
-        plt.plot(epochs, self.val_acc, "k", label="Val Acc")
-        plt.legend()
-        plt.grid(True)
-        plt.show()
+        # Pokud není y_max zadán, nastavíme jej automaticky podle dat
+        if self.y_max_loss is None:
+            self.y_max_loss = max(self.losses + self.val_losses)
 
-history_this = LossHistory()
+        if self.y_max_acc is None:
+            self.y_max_acc = max(self.acc + self.val_acc)
+
+        # ====== 2) graf ztrátovosti (LOSS) ======
+        plt.figure()
+        plt.plot(epochs, self.losses, label="Train Loss")
+        plt.plot(epochs, self.val_losses, label="Val Loss")
+        plt.ylim(self.y_min_loss, self.y_max_loss)
+        plt.xlabel("Epoch")
+        plt.ylabel("Loss")
+        plt.title("Training & Validation Loss")
+        plt.grid(True)
+        plt.legend()
+        plt.savefig(os.path.join(save_dir, "graf_loss.pdf"), format="pdf")
+        plt.close()
+
+        # ====== 3) graf přesnosti (ACCURACY) ======
+        plt.figure()
+        plt.plot(epochs, self.acc, label="Train Accuracy")
+        plt.plot(epochs, self.val_acc, label="Val Accuracy")
+        plt.ylim(self.y_min_acc, self.y_max_acc)
+        plt.xlabel("Epoch")
+        plt.ylabel("Accuracy")
+        plt.title("Training & Validation Accuracy")
+        plt.grid(True)
+        plt.legend()
+        plt.savefig(os.path.join(save_dir, "graf_acc.pdf"), format="pdf")
+        plt.close()
+
+        print(f"\n📁 Grafy uloženy do: {save_dir}\n")
 
 # ================================================
 # =========            Models            =========
 # ================================================
 
 # ---------     CNN 1
-def cnn_by_own(input_shape, num_class, epochs, savepath='./model_own.h5'):
-
+def cnn_by_own(input_shape, num_class, epochs, savepath='./model_own.h5', history=None):
+    if history is None:
+        raise ValueError("Missing history callback: LossHistory()")
+    
     model = Sequential([
         keras.Input(shape=input_shape),
         layers.Conv2D(64, (3,3), activation="relu", padding="same"),
@@ -167,14 +223,17 @@ def cnn_by_own(input_shape, num_class, epochs, savepath='./model_own.h5'):
         train_dataset,
         validation_data=validation_dataset,
         epochs=epochs,
-        callbacks=[earlyStopping, saveBestModel, history_this]
+        callbacks=[earlyStopping, saveBestModel, history]
     )
 
     return model
 
 # ---------     Xception
 
-def xception(input_shape, num_class, epochs, savepath='./xception.h5', history=history_this):
+def xception(input_shape, num_class, epochs, savepath='./xception.h5', history=None):
+    if history is None:
+        raise ValueError("Missing history callback: LossHistory()")
+    
     # Načíst předtrénovaný Xception bez fully-connected vrstvy
     base_model = Xception(
         include_top=False,
@@ -235,7 +294,10 @@ def xception(input_shape, num_class, epochs, savepath='./xception.h5', history=h
 
 # ---------     VGG16
 
-def vgg16(input_shape, num_class, epochs, savepath='./VGG16.h5', history=history_this):
+def vgg16(input_shape, num_class, epochs, savepath='./VGG16.h5', history=None):
+    if history is None:
+        raise ValueError("Missing history callback: LossHistory()")
+    
     # Načíst předtrénovaný VGG16 bez fully-connected vrstev
     base_model = VGG16(
         include_top=False,
@@ -299,7 +361,21 @@ def vgg16(input_shape, num_class, epochs, savepath='./VGG16.h5', history=history
 # =========            Train            =========
 # ===============================================
 
+Y_MIN_LOSS = 0
+Y_MAX_LOSS = 0.4
+Y_MIN_ACC = 0.8
+Y_MAX_ACC = 1.2
+
+EPOCHS = 20
+
+
+history_this = LossHistory()
 gpu_available()
-model = vgg16(INPUT_SIZE, num_class=NUM_CLASSES, epochs=20)
-history_this.plot()
-plt.show()
+history_this = LossHistory(model_name="vgg16", y_min_loss=Y_MIN_LOSS, y_max_loss=Y_MAX_LOSS, y_min_acc=Y_MIN_ACC, y_max_acc=Y_MAX_ACC)
+model = vgg16(INPUT_SIZE, num_class=NUM_CLASSES, epochs=EPOCHS, history=history_this)
+history_this.save_plots()
+
+# gpu_available()
+# model = vgg16(INPUT_SIZE, num_class=NUM_CLASSES, epochs=20)
+# history_this.plot()
+# plt.show()
