@@ -3,8 +3,6 @@ import tensorflow as tf
 from keras.layers import Dense,Flatten,GlobalAveragePooling2D,Input,Conv2D,MaxPooling2D,Dropout
 import matplotlib.pyplot as plt
 import keras
-import warnings
-warnings.filterwarnings("ignore")
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
@@ -63,7 +61,7 @@ train_dataset = tf.keras.utils.image_dataset_from_directory(
     './train_224/',
     image_size=TARGET_SIZE,
     batch_size=BATCHSIZE,
-    label_mode='categorical' # stejné jako class_mode='categorical'
+    label_mode='categorical'
 )
 
 validation_dataset = tf.keras.utils.image_dataset_from_directory(
@@ -80,7 +78,7 @@ test_dataset = tf.keras.utils.image_dataset_from_directory(
     label_mode='categorical'
 )
 
-# Normalizace
+# normalization
 normalization = layers.Rescaling(1./255)
 
 train_dataset = train_dataset.map(lambda x, y: (normalization(x), y))
@@ -91,17 +89,17 @@ test_dataset = test_dataset.map(lambda x, y: (normalization(x), y))
 # =========            Define the image plotting functions            =========
 # =============================================================================
 
-#plot the figures
+# plot the figures
 class LossHistory(keras.callbacks.Callback):
     def __init__(
         self,
         model_name="model",
 
-        # oddělené limity pro LOSS graf
+        # separate limits for LOSS graph
         y_min_loss=0,
         y_max_loss=None,
 
-        # oddělené limity pro ACC graf
+        # separate limits for ACC graph
         y_min_acc=0,
         y_max_acc=None,
     ):
@@ -132,11 +130,11 @@ class LossHistory(keras.callbacks.Callback):
 
     @property
     def training_time(self):
-        # doba trénování v sekundách
+        # training time in seconds
         return self.end_time - self.start_time
     @property
     def epochs_trained(self):
-        # skutečný počet odučených epoch (po EarlyStopping)
+        # actual number of epochs trained (after EarlyStopping)
         return len(self.losses)
     def get_best_val_metrics(self):
         """Vrátí (best_val_acc, best_val_loss, best_epoch) podle nejlepší val_acc."""
@@ -151,21 +149,21 @@ class LossHistory(keras.callbacks.Callback):
         import datetime, os
         import matplotlib.pyplot as plt
 
-        # ====== 1) vytvoření složky result/YYYY_MM_DD_HH_MM_modelname ======
+        # ====== 1) folder creation result/YYYY_MM_DD_HH_MM_modelname ======
         timestamp = datetime.datetime.now().strftime("%Y_%m_%d_%H_%M")
         save_dir = os.path.join("result", f"{timestamp}_{self.model_name}")
         os.makedirs(save_dir, exist_ok=True)
 
         epochs = range(len(self.losses))
 
-        # Pokud není y_max zadán, nastavíme jej automaticky podle dat
+        # if y_max is not specified, we set it automatically based on the data.
         if self.y_max_loss is None:
             self.y_max_loss = max(self.losses + self.val_losses)
 
         if self.y_max_acc is None:
             self.y_max_acc = max(self.acc + self.val_acc)
 
-        # ====== 2) graf ztrátovosti (LOSS) ======
+        # ====== 2) loss graph (LOSS) ======
         plt.figure()
         plt.plot(epochs, self.losses, label="Train Loss")
         plt.plot(epochs, self.val_losses, label="Val Loss")
@@ -179,7 +177,7 @@ class LossHistory(keras.callbacks.Callback):
         plt.savefig(os.path.join(save_dir, loss_filename), format="pdf")
         plt.close()
 
-        # ====== 3) graf přesnosti (ACCURACY) ======
+        # ====== 3) accuracy graph (ACCURACY) ======
         plt.figure()
         plt.plot(epochs, self.acc, label="Train Accuracy")
         plt.plot(epochs, self.val_acc, label="Val Accuracy")
@@ -224,7 +222,7 @@ def cnn_by_own(input_shape, num_class, epochs, savepath='./model_own.h5', histor
         layers.Dense(num_class, activation="softmax")
     ])
 
-    # Optimizer s learning rate
+    # optimizer with learning rate
     optimizer = tf.keras.optimizers.Adam(
         learning_rate=0.001,
         beta_1=0.9,
@@ -264,20 +262,20 @@ def xception(input_shape, num_class, epochs, savepath='./xception.h5', history=N
     if history is None:
         raise ValueError("Missing history callback: LossHistory()")
     
-    # Načíst předtrénovaný Xception bez fully-connected vrstvy
+    # load pre-trained Xception without fully-connected layer
     base_model = Xception(
         include_top=False,
         weights="imagenet",
         input_shape=input_shape
     )
 
-    # Freeze prvních 131 vrstev (lze upravit)
+    # freeze the first 131 layers (can be adjusted)
     for layer in base_model.layers[:131]:
         layer.trainable = False
     for layer in base_model.layers[131:]:
         layer.trainable = True
 
-    # Postupné dobudování top části
+    # gradual completion of the top section
     x = GlobalAveragePooling2D()(base_model.output)
     x = Dense(256, activation="relu")(x)
     x = Dropout(0.5)(x)
@@ -285,7 +283,7 @@ def xception(input_shape, num_class, epochs, savepath='./xception.h5', history=N
 
     model = Model(inputs=base_model.input, outputs=outputs)
 
-    # Optimizer s learning rate
+    # optimizer with learning rate
     optimizer = tf.keras.optimizers.Adam(
         learning_rate=0.001,
         beta_1=0.9,
@@ -298,7 +296,7 @@ def xception(input_shape, num_class, epochs, savepath='./xception.h5', history=N
         metrics=["accuracy"]
     )
 
-    # Callbacks (jako u prvního modelu)
+    # Callbacks (as with the first model)
     earlyStopping = keras.callbacks.EarlyStopping(
         monitor="val_accuracy",
         patience=3,
@@ -312,7 +310,7 @@ def xception(input_shape, num_class, epochs, savepath='./xception.h5', history=N
         verbose=1
     )
 
-    # Trénování — stejná API jako u prvního modelu
+    # Training — same API as in the first model
     model.fit(
         train_dataset,
         validation_data=validation_dataset,
@@ -327,21 +325,21 @@ def vgg16(input_shape, num_class, epochs, savepath='./VGG16.h5', history=None):
     if history is None:
         raise ValueError("Missing history callback: LossHistory()")
     
-    # Načíst předtrénovaný VGG16 bez fully-connected vrstev
+    # load pre-trained VGG16 without fully-connected layer
     base_model = VGG16(
         include_top=False,
         weights="imagenet",
         input_shape=input_shape
     )
 
-    # Freeze prvních 15 vrstev
+    # freeze the first 15 layers
     for layer in base_model.layers[:15]:
         layer.trainable = False
 
     for layer in base_model.layers[15:]:
         layer.trainable = True
 
-    # Přidat vlastní klasifikační část
+    # add your own classification section
     x = GlobalAveragePooling2D()(base_model.output)
     x = Dense(256, activation="relu")(x)
     x = Dropout(0.5)(x)
@@ -349,7 +347,7 @@ def vgg16(input_shape, num_class, epochs, savepath='./VGG16.h5', history=None):
 
     model = Model(inputs=base_model.input, outputs=outputs, name="VGG16_custom")
 
-    # Optimizer
+    # optimizer
     optimizer = tf.keras.optimizers.Adam(
         learning_rate=0.001,
         beta_1=0.9,
@@ -362,7 +360,7 @@ def vgg16(input_shape, num_class, epochs, savepath='./VGG16.h5', history=None):
         metrics=["accuracy"]
     )
 
-    # Callbacks
+    # callbacks
     earlyStopping = keras.callbacks.EarlyStopping(
         monitor="val_accuracy",
         patience=2,
@@ -377,7 +375,7 @@ def vgg16(input_shape, num_class, epochs, savepath='./VGG16.h5', history=None):
         save_best_only=True
     )
 
-    # Trénování – stejná API jako tvé ostatní modely
+    # Training — same API as in the first model
     model.fit(
         train_dataset,
         validation_data=validation_dataset,
@@ -392,21 +390,21 @@ def vgg19(input_shape, num_class, epochs, savepath="./VGG19.h5", history=None):
     if history is None:
         raise ValueError("Missing history callback: LossHistory()")
     
-    # ===== 1) Načíst předtrénovaný VGG19 bez fully-connected vrstev =====
+    # load pre-trained VGG19 without fully-connected layer
     base_model = VGG19(
         include_top=False,
         weights="imagenet",
         input_shape=input_shape
     )
 
-    # Freeze prvních 19 vrstev (stejný princip jako u VGG16)
+    # freeze the first 19 layers
     for layer in base_model.layers[:19]:
         layer.trainable = False
 
     for layer in base_model.layers[19:]:
         layer.trainable = True
 
-    # ===== 2) Přidat vlastní klasifikační část =====
+    # add your own classification section
     x = GlobalAveragePooling2D()(base_model.output)
     x = Dense(256, activation="relu")(x)
     x = Dropout(0.5)(x)
@@ -414,7 +412,7 @@ def vgg19(input_shape, num_class, epochs, savepath="./VGG19.h5", history=None):
 
     model = Model(inputs=base_model.input, outputs=outputs, name="VGG19_custom")
 
-    # ===== 3) Kompilace =====
+    # compilation
     optimizer = tf.keras.optimizers.Adam(
         learning_rate=0.001,
         beta_1=0.9,
@@ -427,7 +425,7 @@ def vgg19(input_shape, num_class, epochs, savepath="./VGG19.h5", history=None):
         metrics=["accuracy"]
     )
 
-    # ===== 4) Callbacks =====
+    # callbacks
     earlyStopping = keras.callbacks.EarlyStopping(
         monitor="val_accuracy",
         patience=2,
@@ -442,7 +440,7 @@ def vgg19(input_shape, num_class, epochs, savepath="./VGG19.h5", history=None):
         save_best_only=True
     )
 
-    # ===== 5) Trénování (sjednocené API – jako u VGG16) =====
+    # training
     model.fit(
         train_dataset,
         validation_data=validation_dataset,
@@ -457,22 +455,22 @@ def resnet(input_shape, num_class, epochs, savepath="./resnet.h5", history=None)
     if history is None:
         raise ValueError("Missing history callback: LossHistory()")
 
-    # ===== 1) Načtení předtrénovaného ResNet50 =====
+    # load pre-trained ResNet50 without fully-connected layer
     base_model = ResNet50(
         include_top=False,
         weights="imagenet",
         input_shape=input_shape
     )
 
-    # Freeze prvních ~120 vrstev
+    # freeze the first ~120 layers
     for layer in base_model.layers[:120]:
         layer.trainable = False
 
-    # Ostatní vrstvy trénovatelné
+    # other trainable layers
     for layer in base_model.layers[120:]:
         layer.trainable = True
 
-    # ===== 2) Vlastní klasifikační hlava =====
+    # add your own classification section
     x = GlobalAveragePooling2D()(base_model.output)
     x = Dense(256, activation="relu")(x)
     x = Dropout(0.5)(x)
@@ -480,7 +478,7 @@ def resnet(input_shape, num_class, epochs, savepath="./resnet.h5", history=None)
 
     model = Model(inputs=base_model.input, outputs=outputs, name="ResNet50_custom")
 
-    # ===== 3) Kompilace =====
+    # compilation
     optimizer = tf.keras.optimizers.Adam(
         learning_rate=0.001,
         beta_1=0.9,
@@ -493,7 +491,7 @@ def resnet(input_shape, num_class, epochs, savepath="./resnet.h5", history=None)
         metrics=["accuracy"]
     )
 
-    # ===== 4) Callbacks =====
+    # callbacks
     earlyStopping = keras.callbacks.EarlyStopping(
         monitor="val_accuracy",
         patience=2,
@@ -508,7 +506,7 @@ def resnet(input_shape, num_class, epochs, savepath="./resnet.h5", history=None)
         save_best_only=True
     )
 
-    # ===== 5) Trénování – sjednocené API =====
+    # training
     model.fit(
         train_dataset,
         validation_data=validation_dataset,
@@ -523,21 +521,21 @@ def inception(input_shape, num_class, epochs, savepath="./inception.h5", history
     if history is None:
         raise ValueError("Missing history callback: LossHistory()")
 
-    # ===== 1) Načtení předtrénovaného InceptionV3 =====
+    # load pre-trained InceptionV3 without fully-connected layer
     base_model = InceptionV3(
         include_top=False,
         weights="imagenet",
         input_shape=input_shape
     )
 
-    # Freeze prvních 35 vrstev – původní nastavení
+    # freeze the first 35 layers
     for layer in base_model.layers[:35]:
         layer.trainable = False
 
     for layer in base_model.layers[35:]:
         layer.trainable = True
 
-    # ===== 2) Klasifikační část =====
+    # add your own classification section
     x = GlobalAveragePooling2D()(base_model.output)
     x = Dense(256, activation="relu")(x)
     x = Dropout(0.5)(x)
@@ -545,7 +543,7 @@ def inception(input_shape, num_class, epochs, savepath="./inception.h5", history
 
     model = Model(inputs=base_model.input, outputs=outputs, name="InceptionV3_custom")
 
-    # ===== 3) Kompilace =====
+    # compilation
     optimizer = tf.keras.optimizers.Adam(
         learning_rate=0.001,
         beta_1=0.9,
@@ -558,7 +556,7 @@ def inception(input_shape, num_class, epochs, savepath="./inception.h5", history
         metrics=["accuracy"]
     )
 
-    # ===== 4) Callbacks =====  
+    # callbacks
     earlyStopping = keras.callbacks.EarlyStopping(
         monitor="val_accuracy",
         patience=2,
@@ -573,7 +571,7 @@ def inception(input_shape, num_class, epochs, savepath="./inception.h5", history
         save_best_only=True
     )
 
-    # ===== 5) Trénování (sjednocená API — fit(), ne fit_generator) =====
+    # training
     model.fit(
         train_dataset,
         validation_data=validation_dataset,
@@ -588,21 +586,21 @@ def inceptionresnet(input_shape, num_class, epochs, savepath="./inceptionresnet.
     if history is None:
         raise ValueError("Missing history callback: LossHistory()")
 
-    # ===== 1) Načtení předtrénovaného InceptionResNetV2 =====
+    # load pre-trained InceptionResNetV2 without fully-connected layer
     base_model = InceptionResNetV2(
         include_top=False,
         weights="imagenet",
         input_shape=input_shape
     )
 
-    # Freeze prvních 500 vrstev (původní nastavení)
+    # freeze the first 500 layers
     for layer in base_model.layers[:500]:
         layer.trainable = False
 
     for layer in base_model.layers[500:]:
         layer.trainable = True
 
-    # ===== 2) Klasifikační hlava =====
+    # add your own classification section
     x = GlobalAveragePooling2D()(base_model.output)
     x = Dense(256, activation="relu")(x)
     x = Dropout(0.5)(x)
@@ -610,7 +608,7 @@ def inceptionresnet(input_shape, num_class, epochs, savepath="./inceptionresnet.
 
     model = Model(inputs=base_model.input, outputs=outputs, name="InceptionResNetV2_custom")
 
-    # ===== 3) Kompilace =====
+    # compilation
     optimizer = tf.keras.optimizers.Adam(
         learning_rate=0.001,
         beta_1=0.9,
@@ -623,7 +621,7 @@ def inceptionresnet(input_shape, num_class, epochs, savepath="./inceptionresnet.
         metrics=["accuracy"]
     )
 
-    # ===== 4) Callbacky =====
+    # callbacks
     earlyStopping = keras.callbacks.EarlyStopping(
         monitor="val_accuracy",
         patience=2,
@@ -638,7 +636,7 @@ def inceptionresnet(input_shape, num_class, epochs, savepath="./inceptionresnet.
         save_best_only=True
     )
 
-    # ===== 5) Trénování – sjednocené API, žádný fit_generator =====
+    # training
     model.fit(
         train_dataset,
         validation_data=validation_dataset,
@@ -681,13 +679,13 @@ def train_model_main(model_name):
     model = model_fn(INPUT_SIZE, num_class=NUM_CLASSES, epochs=EPOCHS, history=history_this)
     history_this.save_plots()
 
-    # === Validační metriky (nejlepší epoch podle val_accuracy) ===
+    # === Validation metrics (best epoch according to val_accuracy) ===
     best_val_acc, best_val_loss, best_epoch = history_this.get_best_val_metrics()
 
-    # === Testovací metriky ===
+    # === Test metrics ===
     test_loss, test_acc = model.evaluate(test_dataset, verbose=0)
 
-    # === Souhrnný výpis ===
+    # === Summary ===
     print("\n================== SHRNU TRENOVANI ==================")
     print(f"model: {history_this.model_name}")
     print(f"počet parametrů: {model.count_params():,}")

@@ -79,18 +79,18 @@ def load_all_csvs(folder_path):
 
 MODE = Mode.DECIMAL
 DATA_PATH_NO_SPLIT = r"C:\Users\fisar\Desktop\Diplomka\other_models_keras\data\CICIoV2024"
-#Read dataset
+# read dataset
 df = load_data_to_DF(DATA_PATH_NO_SPLIT, MODE)
 # print(df)
 
 # =======   DATA TRANSFORMATION
 
-# Transform all features into the scale of [0,1]
+# transform all features into the scale of [0,1]
 numeric_features = df.dtypes[df.dtypes != 'object'].index
 scaler = QuantileTransformer() 
 df[numeric_features] = scaler.fit_transform(df[numeric_features])
 
-# Multiply the feature values by 255 to transform them into the scale of [0,255]
+# multiply the feature values by 255 to transform them into the scale of [0,255]
 df[numeric_features] = df[numeric_features].apply(
     lambda x: (x*255))
 
@@ -149,7 +149,7 @@ for subdir in os.listdir(train_dir):
         all_imgs.append(filepath)
 print(f"total number of images: {len(all_imgs)}") # 47624
 
-#split a test set from the dataset, train/val/test size = 80/10/10
+# split a test set from the dataset, train/val/test size = 80/10/10
 IMAGE_COUNT_TEST = len(all_imgs)//10 # 10% Test
 IMAGE_COUNT_VAL = len(all_imgs)//10 # 10% Val
 
