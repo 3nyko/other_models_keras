@@ -34,6 +34,7 @@ import numpy as np
 from PIL import Image
 import sklearn.metrics as metrics
 from sklearn.metrics import accuracy_score,precision_score,recall_score,f1_score
+import time
 
 # Misc
 import warnings
@@ -66,18 +67,25 @@ train_dataset = tf.keras.utils.image_dataset_from_directory(
 )
 
 validation_dataset = tf.keras.utils.image_dataset_from_directory(
+    './val_224/',
+    image_size=TARGET_SIZE,
+    batch_size=BATCHSIZE,
+    label_mode='categorical'
+)
+
+test_dataset = tf.keras.utils.image_dataset_from_directory(
     './test_224/',
     image_size=TARGET_SIZE,
     batch_size=BATCHSIZE,
     label_mode='categorical'
 )
 
-
 # Normalizace
 normalization = layers.Rescaling(1./255)
 
 train_dataset = train_dataset.map(lambda x, y: (normalization(x), y))
 validation_dataset = validation_dataset.map(lambda x, y: (normalization(x), y))
+test_dataset = test_dataset.map(lambda x, y: (normalization(x), y))
 
 # =============================================================================
 # =========            Define the image plotting functions            =========
@@ -111,12 +119,33 @@ class LossHistory(keras.callbacks.Callback):
         self.val_losses = []
         self.acc = []
         self.val_acc = []
+        self.start_time = time.time()
 
     def on_epoch_end(self, epoch, logs=None):
         self.losses.append(logs.get('loss'))
         self.val_losses.append(logs.get('val_loss'))
         self.acc.append(logs.get('accuracy'))
         self.val_acc.append(logs.get('val_accuracy'))
+
+    def on_train_end(self, logs=None):
+        self.end_time = time.time()
+
+    @property
+    def training_time(self):
+        # doba trénování v sekundách
+        return self.end_time - self.start_time
+    @property
+    def epochs_trained(self):
+        # skutečný počet odučených epoch (po EarlyStopping)
+        return len(self.losses)
+    def get_best_val_metrics(self):
+        """Vrátí (best_val_acc, best_val_loss, best_epoch) podle nejlepší val_acc."""
+        if not self.val_acc:
+            return None, None, None
+        best_epoch = int(np.argmax(self.val_acc))
+        best_val_acc = float(self.val_acc[best_epoch])
+        best_val_loss = float(self.val_losses[best_epoch])
+        return best_val_acc, best_val_loss, best_epoch
 
     def save_plots(self):
         import datetime, os
@@ -164,7 +193,7 @@ class LossHistory(keras.callbacks.Callback):
         plt.savefig(os.path.join(save_dir, acc_filename), format="pdf")
         plt.close()
 
-        print(f"\n📁 Grafy uloženy do: {save_dir}\n")
+        print(f"\n Grafy uloženy do: {save_dir}\n")
 
 # ================================================
 # =========            Models            =========
@@ -619,10 +648,15 @@ def inceptionresnet(input_shape, num_class, epochs, savepath="./inceptionresnet.
 
     return model
 
-
-# ===============================================
-# =========            Train            =========
-# ===============================================
+MODEL_REGISTRY = {
+    "cnn_by_own": cnn_by_own,
+    "xception": xception,
+    "vgg16": vgg16,
+    "vgg19": vgg19,
+    "resnet": resnet,
+    "inception": inception,
+    "inceptionresnet": inceptionresnet
+}
 
 Y_MIN_LOSS = 0
 Y_MAX_LOSS = 0.4
@@ -631,14 +665,50 @@ Y_MAX_ACC = 1.2
 
 EPOCHS = 20
 
+def train_model_main(model_name):
+    if model_name not in MODEL_REGISTRY:
+        raise ValueError(f"Model '{model_name}' není v MODELS. "
+                         f"Dostupné: {list(MODEL_REGISTRY.keys())}")
 
-history_this = LossHistory()
+    model_fn = MODEL_REGISTRY[model_name]
+
+    # ===============================================
+    # =========            Train            =========
+    # ===============================================
+
+    history_this = LossHistory()
+    history_this = LossHistory(model_name=model_name, y_min_loss=Y_MIN_LOSS, y_max_loss=Y_MAX_LOSS, y_min_acc=Y_MIN_ACC, y_max_acc=Y_MAX_ACC)
+    model = model_fn(INPUT_SIZE, num_class=NUM_CLASSES, epochs=EPOCHS, history=history_this)
+    history_this.save_plots()
+
+    # === Validační metriky (nejlepší epoch podle val_accuracy) ===
+    best_val_acc, best_val_loss, best_epoch = history_this.get_best_val_metrics()
+
+    # === Testovací metriky ===
+    test_loss, test_acc = model.evaluate(test_dataset, verbose=0)
+
+    # === Souhrnný výpis ===
+    print("\n================== SHRNU TRENOVANI ==================")
+    print(f"model: {history_this.model_name}")
+    print(f"počet parametrů: {model.count_params():,}")
+    print(f"doba trénování: {history_this.training_time:.2f} s")
+    print(f"počet epoch: {history_this.epochs_trained}")
+    if best_epoch is not None:
+        print(f"val acc (best): {best_val_acc:.4f} (epoch {best_epoch+1})")
+        print(f"val loss (best): {best_val_loss:.4f} (epoch {best_epoch+1})")
+    else:
+        print("val acc: N/A")
+        print("val loss: N/A")
+    print(f"test acc: {test_acc:.4f}")
+    print(f"test loss: {test_loss:.4f}")
+    print("=====================================================\n")
+
 gpu_available()
-history_this = LossHistory(model_name="vgg16", y_min_loss=Y_MIN_LOSS, y_max_loss=Y_MAX_LOSS, y_min_acc=Y_MIN_ACC, y_max_acc=Y_MAX_ACC)
-model = inceptionresnet(INPUT_SIZE, num_class=NUM_CLASSES, epochs=EPOCHS, history=history_this)
-history_this.save_plots()
 
-# gpu_available()
-# model = vgg16(INPUT_SIZE, num_class=NUM_CLASSES, epochs=20)
-# history_this.plot()
-# plt.show()
+train_model_main("cnn_by_own")
+train_model_main("xception")
+train_model_main("vgg16")
+train_model_main("vgg19")
+train_model_main("resnet")
+train_model_main("inception")
+train_model_main("inceptionresnet")

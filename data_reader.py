@@ -14,6 +14,7 @@ import warnings
 from enum import Enum
 warnings.filterwarnings("ignore")
 
+
 # =====================================================
 # =========       Constants and options       =========
 # =====================================================
@@ -95,7 +96,6 @@ df[numeric_features] = df[numeric_features].apply(
 
 # print(df.describe())
 
-
 # =======   GENERATE IMAGES
 
 df_0 = df[df['specific_class'] == 'BENIGN'].drop(['label', 'category', 'specific_class'], axis=1) # BENIGN
@@ -138,34 +138,43 @@ generate_image(df_5,5)
 # =======   SPLITTING THE TRAINING AND TESTING SET
 
 # Create folders to store images
-train_dir='./train/'
-val_dir='./test/'
+train_dir = './train/'
+val_dir = './val/'
+test_dit = './test/'
 all_imgs=[]
+
 for subdir in os.listdir(train_dir):
     for filename in os.listdir(os.path.join(train_dir,subdir)):
         filepath=os.path.join(train_dir,subdir,filename)
         all_imgs.append(filepath)
 print(f"total number of images: {len(all_imgs)}") # 47624
 
-#split a test set from the dataset, train/test size = 80%/20%
-numbers = len(all_imgs)//5 	#size of test set (20%)
+#split a test set from the dataset, train/val/test size = 80/10/10
+IMAGE_COUNT_TEST = len(all_imgs)//10 # 10% Test
+IMAGE_COUNT_VAL = len(all_imgs)//10 # 10% Val
 
-def my_move_file(src_file,dst_file):
-    if not os.path.isfile(src_file):
-        print ("%s not exist!"%(src_file))
-    else:
-        fpath,fname=os.path.split(dst_file)    
-        if not os.path.exists(fpath):
-            os.makedirs(fpath)               
-        shutil.move(src_file,dst_file)          
-        #print ("move %s -> %s"%(srcfile,dstfile))
-
-def create_test_set():
+def create_test_and_val_set():
+    def my_move_file(src_file,dst_file):
+        if not os.path.isfile(src_file):
+            print ("%s not exist!"%(src_file))
+        else:
+            fpath,fname=os.path.split(dst_file)    
+            if not os.path.exists(fpath):
+                os.makedirs(fpath)               
+            shutil.move(src_file,dst_file)          
+            #print ("move %s -> %s"%(srcfile,dstfile))
     # Create the test set
-    val_imgs=random.sample(all_imgs,numbers)
+    val_imgs = random.sample(all_imgs, IMAGE_COUNT_VAL)
     for img in val_imgs:
         dest_path=img.replace(train_dir,val_dir)
-        my_move_file(img,dest_path)
+        my_move_file(img, dest_path)
+    print('Finish creating validation set')
+
+    test_img = random.sample(all_imgs, IMAGE_COUNT_TEST)
+    for img in test_img:
+        dest_path=img.replace(train_dir,test_dit)
+        my_move_file(img, dest_path)
+    
     print('Finish creating test set')
 
 def resize_to_224():
@@ -194,16 +203,21 @@ def resize_to_224():
     DATA_DIR2_224='./test_224/'
     get_224(folder='./test/',dstdir=DATA_DIR2_224)
 
+    DATA_DIR2_224='./val_224/'
+    get_224(folder='./val/',dstdir=DATA_DIR2_224)
+
 # fix
-create_test_set()
+create_test_and_val_set()
 resize_to_224()
+
+
+
 
 # Read the images for each category, the file name may vary (27.png, 83.png...)
 img1 = Image.open('./train_224/0/27.png')
-img2 = Image.open('./train_224/1/83.png')
-img3 = Image.open('./train_224/2/27.png')
-img4 = Image.open('./train_224/3/27.png')
-img5 = Image.open('./train_224/4/27.png')
+img2 = Image.open('./test_224/1/111.png')
+img3 = Image.open('./val_224/2/251.png')
+
 
 plt.figure(figsize=(10, 10)) 
 plt.subplot(1,5,1)
@@ -215,10 +229,3 @@ plt.title("RPM Spoofing")
 plt.subplot(1,5,3)
 plt.imshow(img3)
 plt.title("Gear Spoofing")
-plt.subplot(1,5,4)
-plt.imshow(img4)
-plt.title("DoS Attack")
-plt.subplot(1,5,5)
-plt.imshow(img5)
-plt.title("Fuzzy Attack")
-plt.show()  # display it
