@@ -210,9 +210,6 @@ def resize_to_224():
 create_test_and_val_set()
 resize_to_224()
 
-
-
-
 # Read the images for each category, the file name may vary (27.png, 83.png...)
 img1 = Image.open('./train_224/0/27.png')
 img2 = Image.open('./test_224/1/111.png')
