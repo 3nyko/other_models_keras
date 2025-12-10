@@ -68,7 +68,7 @@ def load_all_csvs(folder_path):
     for col in df.columns:
         if col.startswith("DATA_") or col in ["ID", "DLC"]:
             df[col] = pd.to_numeric(df[col], errors="coerce")
-    df = df.fillna(0) # vyplnit pripadne prazdne hodnoty nulou
+    df = df.fillna(0) # fill any empty spaces with zeros
     return df
 
 # =====================================================
