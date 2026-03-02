@@ -149,9 +149,11 @@ for subdir in os.listdir(train_dir):
         all_imgs.append(filepath)
 print(f"total number of images: {len(all_imgs)}") # 47624
 
-# split a test set from the dataset, train/val/test size = 80/10/10
-IMAGE_COUNT_TEST = len(all_imgs)//10 # 10% Test
-IMAGE_COUNT_VAL = len(all_imgs)//10 # 10% Val
+# split a test set from the dataset, train/val/test size = 60/20/20
+TEST_PERC = 20 # 20% Test
+VAL_PERC = 20 # 20% Val
+IMAGE_COUNT_TEST = len(all_imgs)//int(100/TEST_PERC) 
+IMAGE_COUNT_VAL = len(all_imgs)//int(100/VAL_PERC)  
 
 def create_test_and_val_set():
     def my_move_file(src_file,dst_file):
@@ -164,14 +166,19 @@ def create_test_and_val_set():
             shutil.move(src_file,dst_file)          
             #print ("move %s -> %s"%(srcfile,dstfile))
     # Create the test set
-    val_imgs = random.sample(all_imgs, IMAGE_COUNT_VAL)
+    all_imgs_shuffled = all_imgs.copy()
+    random.shuffle(all_imgs_shuffled)
+    
+    val_imgs = all_imgs_shuffled[:IMAGE_COUNT_VAL]
+    # val_imgs = random.sample(all_imgs, IMAGE_COUNT_VAL)
     for img in val_imgs:
         dest_path=img.replace(train_dir,val_dir)
         my_move_file(img, dest_path)
     print('Finish creating validation set')
 
-    test_img = random.sample(all_imgs, IMAGE_COUNT_TEST)
-    for img in test_img:
+    test_imgs = all_imgs_shuffled[IMAGE_COUNT_VAL:(IMAGE_COUNT_VAL + IMAGE_COUNT_TEST)]
+    # test_img = random.sample(all_imgs, IMAGE_COUNT_TEST)
+    for img in test_imgs:
         dest_path=img.replace(train_dir,test_dit)
         my_move_file(img, dest_path)
     
