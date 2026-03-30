@@ -8,3 +8,5 @@ test_224/
 # ignore weights
 *.h5
 *.hdf5
+*.png
+.vscode/

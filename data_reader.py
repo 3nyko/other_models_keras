@@ -13,6 +13,7 @@ from PIL import Image
 import warnings
 from enum import Enum
 warnings.filterwarnings("ignore")
+import glob
 
 
 # =====================================================
@@ -45,6 +46,12 @@ MULTICLASS_DICT = {
 # =====================================================
 # =========            Functions              =========
 # =====================================================
+
+def load_first_png(folder):
+    files = sorted(glob.glob(os.path.join(folder, "*.png")))
+    if not files:
+        raise FileNotFoundError(f"!!! Zadny .png soubor ve slozce {folder}")
+    return Image.open(files[0])
 
 def load_data_to_DF(data_dir, mode=DEFAULT_MODE):
     folder = os.path.join(data_dir, mode.value)
@@ -218,9 +225,9 @@ create_test_and_val_set()
 resize_to_224()
 
 # Read the images for each category, the file name may vary (27.png, 83.png...)
-img1 = Image.open('./train_224/0/27.png')
-img2 = Image.open('./test_224/1/111.png')
-img3 = Image.open('./val_224/2/251.png')
+img1 = load_first_png('./train_224/0')
+img2 = load_first_png('./test_224/1')
+img3 = load_first_png('./val_224/2')
 
 
 plt.figure(figsize=(10, 10)) 
