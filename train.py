@@ -41,11 +41,45 @@ warnings.filterwarnings("ignore")
 # =====================================================
 # =========             Constants             =========
 # =====================================================
-NUM_CLASSES = 6
 TARGET_SIZE = (224, 224)
 INPUT_SIZE = (224, 224, 3)
-BATCHSIZE = 4 # could try 128 or 32 
+BATCHSIZE = 2  # could try 128 or 32 
 # BATCHSIZE only 4 because of low RAM on my PC and big image size
+
+# Dataset switch:
+# - "CICIoV2024"
+# - "Car_Hacking"
+DATASET_CHOICE = "Car_Hacking"
+
+DATASET_PATHS = {
+    "CICIoV2024": {
+        "train": "./train_224/",
+        "val": "./val_224/",
+        "test": "./test_224/",
+        "results_subdir": "CICIoV2024",
+        "num_classes": 6,
+    },
+    "Car_Hacking": {
+        "train": "./train_car_hack_224/",
+        "val": "./val_car_hack_224/",
+        "test": "./test_car_hack_224/",
+        "results_subdir": "Car_Hacking",
+        "num_classes": 5,
+    },
+}
+
+
+def get_dataset_config(dataset_choice):
+    if dataset_choice not in DATASET_PATHS:
+        raise ValueError(
+            f"Unknown DATASET_CHOICE '{dataset_choice}'. "
+            f"Allowed: {list(DATASET_PATHS.keys())}"
+        )
+    return DATASET_PATHS[dataset_choice]
+
+
+DATASET_CONFIG = get_dataset_config(DATASET_CHOICE)
+NUM_CLASSES = DATASET_CONFIG["num_classes"]
 
 def gpu_available():
     gpus = tf.config.list_physical_devices('GPU')
@@ -58,21 +92,21 @@ def gpu_available():
 # =========             Generate Training and Test Images             =========
 # =============================================================================
 train_dataset = tf.keras.utils.image_dataset_from_directory(
-    './train_224/',
+    DATASET_CONFIG["train"],
     image_size=TARGET_SIZE,
     batch_size=BATCHSIZE,
     label_mode='categorical'
 )
 
 validation_dataset = tf.keras.utils.image_dataset_from_directory(
-    './val_224/',
+    DATASET_CONFIG["val"],
     image_size=TARGET_SIZE,
     batch_size=BATCHSIZE,
     label_mode='categorical'
 )
 
 test_dataset = tf.keras.utils.image_dataset_from_directory(
-    './test_224/',
+    DATASET_CONFIG["test"],
     image_size=TARGET_SIZE,
     batch_size=BATCHSIZE,
     label_mode='categorical'
@@ -111,6 +145,7 @@ class LossHistory(keras.callbacks.Callback):
 
         self.y_min_acc = y_min_acc
         self.y_max_acc = y_max_acc
+        self.save_dir = None
 
     def on_train_begin(self, logs=None):
         self.losses = []
@@ -149,10 +184,15 @@ class LossHistory(keras.callbacks.Callback):
         import datetime, os
         import matplotlib.pyplot as plt
 
-        # ====== 1) folder creation result/YYYY_MM_DD_HH_MM_modelname ======
+        # ====== 1) folder: results/<results_subdir>/YYYY_MM_DD_HH_MM_modelname ======
         timestamp = datetime.datetime.now().strftime("%Y_%m_%d_%H_%M")
-        save_dir = os.path.join("result", f"{timestamp}_{self.model_name}")
+        save_dir = os.path.join(
+            "results",
+            DATASET_CONFIG["results_subdir"],
+            f"{timestamp}_{self.model_name}",
+        )
         os.makedirs(save_dir, exist_ok=True)
+        self.save_dir = save_dir
 
         epochs = range(len(self.losses))
 
@@ -191,7 +231,46 @@ class LossHistory(keras.callbacks.Callback):
         plt.savefig(os.path.join(save_dir, acc_filename), format="pdf")
         plt.close()
 
+        # ====== 4) full-range accuracy graph in percent (0-100) ======
+        plt.figure()
+        train_acc_percent = np.array(self.acc) * 100.0
+        val_acc_percent = np.array(self.val_acc) * 100.0
+        plt.plot(epochs, train_acc_percent, label="Train Accuracy (%)")
+        plt.plot(epochs, val_acc_percent, label="Val Accuracy (%)")
+        plt.ylim(0, 100)
+        plt.xlabel("Epoch")
+        plt.ylabel("Accuracy (%)")
+        plt.title(f"{self.model_name} – Training & Validation Accuracy (0-100%)")
+        plt.grid(True)
+        plt.legend()
+        acc_full_filename = f"graf_acc_full_0_100_{self.model_name}.pdf"
+        plt.savefig(os.path.join(save_dir, acc_full_filename), format="pdf")
+        plt.close()
+
         print(f"\n Grafy uloženy do: {save_dir}\n")
+
+    def save_training_summary(self, model, test_loss, test_acc):
+        if self.save_dir is None:
+            raise ValueError("save_plots() must be called before save_training_summary().")
+
+        best_val_acc, best_val_loss, best_epoch = self.get_best_val_metrics()
+        summary_path = os.path.join(self.save_dir, f"summary_{self.model_name}.txt")
+
+        with open(summary_path, "w", encoding="utf-8") as f:
+            f.write(f"model_name: {self.model_name}\n")
+            f.write(f"epochs_trained: {self.epochs_trained}\n")
+            f.write(f"model_parameters: {model.count_params()}\n")
+            f.write(f"training_time_seconds: {self.training_time:.2f}\n")
+            if best_epoch is not None:
+                f.write(f"best_val_epoch: {best_epoch + 1}\n")
+                f.write(f"best_val_accuracy: {best_val_acc:.6f}\n")
+                f.write(f"best_val_loss: {best_val_loss:.6f}\n")
+            else:
+                f.write("best_val_epoch: N/A\n")
+                f.write("best_val_accuracy: N/A\n")
+                f.write("best_val_loss: N/A\n")
+            f.write(f"test_accuracy: {test_acc:.6f}\n")
+            f.write(f"test_loss: {test_loss:.6f}\n")
 
 # ================================================
 # =========            Models            =========
@@ -646,6 +725,62 @@ def inceptionresnet(input_shape, num_class, epochs, savepath="./inceptionresnet.
 
     return model
 
+# ---------     LSTM
+def lstm(input_shape, num_class, epochs, savepath="./lstm.h5", history=None):
+    if history is None:
+        raise ValueError("Missing history callback: LossHistory()")
+
+    model = Sequential([
+        keras.Input(shape=input_shape),
+        layers.Conv2D(32, (3, 3), activation="relu", padding="same"),
+        layers.MaxPooling2D(pool_size=(2, 2)),
+        layers.Conv2D(64, (3, 3), activation="relu", padding="same"),
+        layers.MaxPooling2D(pool_size=(2, 2)),
+        layers.Conv2D(128, (3, 3), activation="relu", padding="same"),
+        layers.MaxPooling2D(pool_size=(2, 2)),
+        # Convert feature map to sequence (timesteps, features) for LSTM.
+        layers.Reshape((28, 28 * 128)),
+        layers.LSTM(128),
+        layers.Dropout(0.5),
+        layers.Dense(128, activation="relu"),
+        layers.Dropout(0.3),
+        layers.Dense(num_class, activation="softmax")
+    ])
+
+    optimizer = tf.keras.optimizers.Adam(
+        learning_rate=0.001,
+        beta_1=0.9,
+        beta_2=0.999
+    )
+
+    model.compile(
+        loss="categorical_crossentropy",
+        optimizer=optimizer,
+        metrics=["accuracy"]
+    )
+
+    earlyStopping = keras.callbacks.EarlyStopping(
+        monitor="val_accuracy",
+        patience=3,
+        restore_best_weights=True
+    )
+
+    saveBestModel = keras.callbacks.ModelCheckpoint(
+        filepath=savepath,
+        monitor="val_accuracy",
+        save_best_only=True,
+        verbose=1
+    )
+
+    model.fit(
+        train_dataset,
+        validation_data=validation_dataset,
+        epochs=epochs,
+        callbacks=[earlyStopping, saveBestModel, history]
+    )
+
+    return model
+
 MODEL_REGISTRY = {
     "cnn_by_own": cnn_by_own,
     "xception": xception,
@@ -653,7 +788,8 @@ MODEL_REGISTRY = {
     "vgg19": vgg19,
     "resnet": resnet,
     "inception": inception,
-    "inceptionresnet": inceptionresnet
+    "inceptionresnet": inceptionresnet,
+    "lstm": lstm
 }
 
 Y_MIN_LOSS = 0
@@ -701,12 +837,29 @@ def train_model_main(model_name):
     print(f"test loss: {test_loss:.4f}")
     print("=====================================================\n")
 
-gpu_available()
+    # Save text summary next to graphs.
+    history_this.save_training_summary(model=model, test_loss=test_loss, test_acc=test_acc)
 
-train_model_main("cnn_by_own")
-train_model_main("xception")
-train_model_main("vgg16")
-train_model_main("vgg19")
-train_model_main("resnet")
-train_model_main("inception")
-train_model_main("inceptionresnet")
+def main():
+    print(f"Dataset: {DATASET_CHOICE}")
+    print(f"Train path: {DATASET_CONFIG['train']}")
+    print(f"Val path: {DATASET_CONFIG['val']}")
+    print(f"Test path: {DATASET_CONFIG['test']}")
+    print(
+        f"Plots & summary directory base: results/{DATASET_CONFIG['results_subdir']}/"
+    )
+
+    gpu_available()
+
+    # train_model_main("cnn_by_own")
+    #train_model_main("xception")
+    # train_model_main("vgg16")
+    train_model_main("vgg19")
+    # train_model_main("resnet")
+    # train_model_main("inception")
+    # train_model_main("inceptionresnet")
+    # train_model_main("lstm")
+
+
+if __name__ == "__main__":
+    main()
